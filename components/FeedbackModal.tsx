@@ -4,9 +4,21 @@ interface FeedbackModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSubmit: (feedback: string) => void;
+  title?: string;
+  description?: string;
+  placeholder?: string;
+  contextImage?: string;
 }
 
-export const FeedbackModal: React.FC<FeedbackModalProps> = ({ isOpen, onClose, onSubmit }) => {
+export const FeedbackModal: React.FC<FeedbackModalProps> = ({ 
+  isOpen, 
+  onClose, 
+  onSubmit,
+  title = "Regenerate Your Ads",
+  description = "What didn't you like about the results? Provide some feedback so we can create something better for you.",
+  placeholder = "e.g., 'Make the ads more colorful and energetic', 'The headlines were too generic', 'Focus more on the product's eco-friendly materials'",
+  contextImage 
+}) => {
   const [feedback, setFeedback] = useState('');
 
   useEffect(() => {
@@ -43,15 +55,22 @@ export const FeedbackModal: React.FC<FeedbackModalProps> = ({ isOpen, onClose, o
         className="bg-slate-800 rounded-2xl shadow-lg p-6 sm:p-8 w-full max-w-lg border border-slate-700 animate-fade-in"
         onClick={(e) => e.stopPropagation()}
       >
-        <h2 className="text-2xl font-bold text-white mb-3">Regenerate Your Ads</h2>
-        <p className="text-slate-400 mb-6">What didn't you like about the results? Provide some feedback so we can create something better for you.</p>
+        <h2 className="text-2xl font-bold text-white mb-3">{title}</h2>
+        <p className="text-slate-400 mb-6">{description}</p>
         
+        {contextImage && (
+          <div className="mb-4 rounded-lg overflow-hidden border border-slate-600">
+            <img src={contextImage} alt="Ad context" className="w-full h-auto object-cover"/>
+          </div>
+        )}
+
         <textarea
           value={feedback}
           onChange={(e) => setFeedback(e.target.value)}
           rows={5}
           className="w-full bg-slate-700 border border-slate-600 rounded-lg px-3 py-2 text-white placeholder-slate-400 focus:ring-2 focus:ring-amber-500 focus:border-amber-500 transition"
-          placeholder="e.g., 'Make the ads more colorful and energetic', 'The headlines were too generic', 'Focus more on the product's eco-friendly materials'"
+          placeholder={placeholder}
+          aria-label="Feedback input"
         />
 
         <div className="mt-6 flex flex-col sm:flex-row-reverse gap-3">

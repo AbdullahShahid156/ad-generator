@@ -155,6 +155,114 @@ async function generateVisualForConcept(productInfo: ProductInfo, concept: strin
 }
 
 
+// New function: Generate a single new concept based on feedback for an old one
+async function generateSingleAdConcept(productInfo: ProductInfo, originalVariant: AdVariant, feedback: string): Promise<AdConcept> {
+  const model = 'gemini-2.5-pro';
+
+  const overlayTextInstruction = productInfo.customOverlayText
+    ? `3.  **overlayText**: You MUST use the exact text provided by the user for the ad's visual overlay: "${productInfo.customOverlayText}". Do not modify it or generate a different one.`
+    : `3.  **overlayText**: A very short, impactful phrase (2-5 words) to be stylishly placed directly ON the image. Examples: "Limited Edition," "Shop Now," "Unlock Your Potential," or a key benefit like "Pure Comfort."`;
+
+  const prompt = `
+    You are an expert creative director specializing in high-impact visual advertising for e-commerce products.
+    Your task is to generate a new, improved visual ad concept for the provided product, based on user feedback.
+    The new concept must be a significant improvement and a completely different idea from the original.
+    The new concept must strictly adhere to the following creative style: **${productInfo.adStyle}**.
+
+    **Original Ad Concept (for context, do not repeat this):**
+    - **Original Visual Idea:** ${originalVariant.concept}
+    - **Original Headline:** ${originalVariant.headlineSuggestion}
+    - **Original Overlay Text:** ${originalVariant.overlayText}
+
+    **User Feedback for Improvement:**
+    You MUST address the following feedback to create a better, completely new concept. DO NOT repeat ideas from the original.
+    Feedback: "${feedback}"
+
+    For the new concept, provide:
+    1.  **concept**: A concise, descriptive prompt for an AI image generator to create the ad visual. It must embody the **${productInfo.adStyle}** style and be different from the original.
+    2.  **headlineSuggestion**: A short, punchy headline that would complement the new visual and the chosen style.
+    ${overlayTextInstruction}
+
+    **Product Information:**
+    - **Name:** ${productInfo.name}
+    - **Description:** ${productInfo.description}
+    - **Target Audience:** ${productInfo.audience}
+
+    Return the response as a single, valid JSON object. Do not include any markdown formatting like \`\`\`json.
+  `;
+
+  const response = await ai.models.generateContent({
+    model,
+    contents: [
+      {
+        parts: [
+          { text: prompt },
+          {
+            inlineData: {
+              data: productInfo.image.base64,
+              mimeType: productInfo.image.mimeType,
+            },
+          },
+        ],
+      },
+    ],
+    config: {
+      responseMimeType: 'application/json',
+      responseSchema: {
+        type: Type.OBJECT,
+        properties: {
+          concept: {
+            type: Type.STRING,
+            description: 'A descriptive prompt for an AI image generator.',
+          },
+          headlineSuggestion: {
+            type: Type.STRING,
+            description: 'A short headline to complement the visual.',
+          },
+          overlayText: {
+            type: Type.STRING,
+            description: 'A very short, impactful phrase to be placed on the image.',
+          },
+        },
+        required: ['concept', 'headlineSuggestion', 'overlayText'],
+      },
+      temperature: 0.9, // Higher temperature for more creative departure from the original
+    },
+  });
+
+  const jsonText = response.text.trim();
+  return JSON.parse(jsonText);
+}
+
+// New exported function for single variant regeneration
+export async function regenerateSingleAdVariant(productInfo: ProductInfo, originalVariant: AdVariant, feedback: string): Promise<AdVariant> {
+  try {
+    // Step 1: Get a new single concept
+    const newConcept = await generateSingleAdConcept(productInfo, originalVariant, feedback);
+
+    // Step 2: Generate image for the new concept
+    const imageBase64 = await generateVisualForConcept(productInfo, newConcept.concept, newConcept.overlayText);
+    const mimeType = 'image/png';
+    
+    return {
+      concept: newConcept.concept,
+      headlineSuggestion: newConcept.headlineSuggestion,
+      overlayText: newConcept.overlayText,
+      image: {
+        base64: imageBase64,
+        url: `data:${mimeType};base64,${imageBase64}`,
+      },
+    };
+  } catch (error) {
+    console.error("Error regenerating single ad variant:", error);
+    if (error instanceof Error) {
+        throw new Error(`Failed to communicate with the AI model for regeneration: ${error.message}`);
+    }
+    throw new Error("An unknown error occurred during AI communication for regeneration.");
+  }
+}
+
+
 // Main function orchestrating the two steps
 export async function generateAdVariants(productInfo: ProductInfo, feedback?: string): Promise<AdVariant[]> {
   try {

@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import type { AdVariant, ProductInfo } from './types';
-import { generateAdVariants } from './services/geminiService';
+import { generateAdVariants, regenerateSingleAdVariant } from './services/geminiService';
 import { ProductForm } from './components/ProductForm';
 import { AdResults } from './components/AdResults';
 import { Header } from './components/Header';
@@ -13,6 +13,8 @@ const App: React.FC = () => {
   const [adVariants, setAdVariants] = useState<AdVariant[]>([]);
   const [productInfo, setProductInfo] = useState<ProductInfo | null>(null);
   const [error, setError] = useState<string>('');
+  const [singleLoadingIndex, setSingleLoadingIndex] = useState<number | null>(null);
+
 
   const handleFormSubmit = async (data: ProductInfo) => {
     setAppState('LOADING');
@@ -50,6 +52,39 @@ const App: React.FC = () => {
     }
   };
   
+  const handleRegenerateSingle = async (variantIndex: number, feedback: string) => {
+    if (!productInfo) {
+      setError('Product information is missing. Cannot regenerate.');
+      setAppState('ERROR');
+      return;
+    }
+
+    const originalVariant = adVariants[variantIndex];
+    if (!originalVariant) {
+      setError('Original variant not found. Cannot regenerate.');
+      setAppState('ERROR');
+      return;
+    }
+    
+    setSingleLoadingIndex(variantIndex);
+    setError('');
+
+    try {
+      const newVariant = await regenerateSingleAdVariant(productInfo, originalVariant, feedback);
+      setAdVariants(currentVariants => 
+        currentVariants.map((v, i) => i === variantIndex ? newVariant : v)
+      );
+    } catch (e) {
+      console.error(e);
+      const errorMessage = e instanceof Error ? e.message : 'An unknown error occurred.';
+      // We don't switch to the main 'ERROR' state to keep the other results visible.
+      // A toast notification would be a good UX improvement here.
+      setError(`Failed to regenerate ad variant. Please try again. Error: ${errorMessage}`);
+    } finally {
+      setSingleLoadingIndex(null);
+    }
+  };
+
   const handleReset = () => {
     setAppState('FORM');
     setAdVariants([]);
@@ -62,7 +97,16 @@ const App: React.FC = () => {
       case 'LOADING':
         return <Loader message="Our AI is designing your visual ads... This can take a few moments as we generate multiple high-quality images." />;
       case 'RESULTS':
-        return productInfo && <AdResults variants={adVariants} productInfo={productInfo} onReset={handleReset} onRegenerate={handleRegenerate} />;
+        return productInfo && (
+          <AdResults 
+            variants={adVariants} 
+            productInfo={productInfo} 
+            onReset={handleReset} 
+            onRegenerate={handleRegenerate} 
+            onRegenerateSingle={handleRegenerateSingle}
+            singleLoadingIndex={singleLoadingIndex}
+          />
+        );
       case 'ERROR':
         return (
           <div className="text-center">
@@ -85,6 +129,7 @@ const App: React.FC = () => {
     <div className="min-h-screen bg-slate-900 bg-gradient-to-br from-slate-900 via-slate-900 to-indigo-900/50">
       <Header />
       <main className="container mx-auto px-4 py-8 sm:py-12">
+        {error && appState === 'RESULTS' && <p className="text-center text-red-400 mb-4">{error}</p>}
         {renderContent()}
       </main>
        <footer className="text-center py-6 text-slate-500 text-sm">
